@@ -13,7 +13,7 @@ def resize_image(image, resized_width):
 
 
 def image_to_ascii(image, density, font_size, colored=False):
-    # setup blank image to draw ASCII characters on
+    # set up blank image to draw ASCII characters on
     font = ImageFont.truetype(os.path.join(os.environ["WINDIR"], "Fonts", "consola.ttf"), size=font_size)
     b_left, b_top, b_right, b_bottom = font.getbbox("@")
     ascii_image = Image.new("RGB", (image.size[0] * b_right, image.size[1] * b_bottom), color=(255, 255, 255))
@@ -117,5 +117,6 @@ if __name__ == "__main__":
     ascii_images = [image_to_ascii(image, density, font_size, args.color) for image in images]
     print(f"{len(ascii_images)} images converted!")
 
-    for image in ascii_images:
-        image.show()
+    # save image to output directory
+    for i in range(len(ascii_images)):
+        ascii_images[i].save(os.path.join(output_directory, f"image{i}.png"))
