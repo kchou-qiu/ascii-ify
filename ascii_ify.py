@@ -5,14 +5,33 @@ from PIL import Image, ImageDraw, ImageFont
 
 
 def resize_image(image, resized_width):
-    # resize original image to reduce pixel count + image complexity
-    # given width determines # of ASCII characters in final image
+    """
+    Resizes given image while the preserving aspect ratio of the original image.
+    Resizing large images reduces image complexity and improves performance during ASCII
+    conversion process.
+
+    :param image: The image to be resized.
+    :param resized_width: The desired width of the resized image.
+    :return: A PIL.Image.Image object.
+    """
     aspect_ratio = image.size[1] / image.size[0]
     resized_height = int(resized_width * aspect_ratio)
     return image.resize((resized_width, resized_height))
 
 
 def image_to_ascii(image, density, font_size, colored=False):
+    """
+    Converts an image to it's ASCII equivalent.
+
+    :param image: The image to be converted.
+    :param density: A string of ASCII characters that maps to the brightness of each pixel. For example using the string
+        "@%#*+=-:. " means pure black pixels are assigned the character "@" while pure white pixels are given the value
+        " ". Anything else are assigned characters in between. More dense strings would give more gradual transitions
+        between colors and lighting.
+    :param font_size: The size of each individual ASCII character.
+    :param colored: Toggle to allow color in the converted image.
+    :return: A PIL.Image.Image object.
+    """
     # set up blank image to draw ASCII characters on
     font = ImageFont.truetype(os.path.join(os.environ["WINDIR"], "Fonts", "consola.ttf"), size=font_size)
     b_left, b_top, b_right, b_bottom = font.getbbox("@")
@@ -25,8 +44,11 @@ def image_to_ascii(image, density, font_size, colored=False):
 
     for x in range(image.size[0]):
         for y in range(image.size[1]):
-            r, g, b = pixels[x, y]
-            luminosity = int(r * 0.3 + g * 0.59 + b * 0.11)
+            r, g, b, a = pixels[x, y]
+
+            # transparent pixels have same RGB values as black (i.e. 0, 0, 0) with alpha = 0 instead of 255
+            # need to check alpha channel, to differentiate between the two
+            luminosity = 255 if a == 0 else int(r * 0.3 + g * 0.59 + b * 0.11)
             pixels[x, y] = (luminosity, luminosity, luminosity)
             ascii_char = density[int(luminosity * (len(density) - 1) / 255)]
 
@@ -43,58 +65,46 @@ if __name__ == "__main__":
     density = "@%#*+=-:. "
     font_size = 12
     images = []
+    video = None
 
     # set up accepted commandline arguments
     parser = argparse.ArgumentParser(description="Asciify given image(s)")
     path_type = parser.add_mutually_exclusive_group(required=True)
-    path_type.add_argument("-f", "-filepath", type=str, help="path to file to asciify")
-    path_type.add_argument("-d", "-directory", type=str, help="path to directory of images to asciify")
+    path_type.add_argument("-f", "-filepath", type=str, help="path to file")
+    path_type.add_argument("-d", "-directory", type=str, help="path to directory of images(.png, .jpg, .jpeg)")
     parser.add_argument("-o", "--outputDir", help="path to output directory")
     parser.add_argument("-s", "--size", type=int, help="font size of ASCII char for output image. Default: 12")
     parser.add_argument("-r", "--resize", type=int, help="resize width of image while retaining aspect ratio")
     parser.add_argument("-c", "--color", action="store_true", help="toggle color for output image")
-    parser.add_argument("-v", "--video", action="store_true", help="toggle for video output instead of images")
     args = parser.parse_args()
 
     # process commandline arguments
-    if args.f:
-        # open a single image
-        if not os.path.isfile(args.f):
-            print(f"{args.f} doesn't exist")
-            sys.exit(2)
-        else:
-            try:
-                images.append(Image.open(args.f).convert("RGB"))
-            except OSError as err:
-                print(f"Unable to open file: {err}")
-                sys.exit(1)
-    else:
-        # open all image files in directory
-        if not os.path.isdir(args.d):
-            print("Given filepath is not a directory.")
-            sys.exit(2)
+    try:
+        if args.f:
+            images.append(Image.open(args.f).convert("RGBA"))
         else:
             for filename in os.listdir(args.d):
                 if filename.endswith(".jpg") or filename.endswith(".jpeg") or filename.endswith(".png"):
-                    try:
-                        images.append(Image.open(os.path.join(args.d, filename)).convert("RGB"))
-                    except OSError as err:
-                        print(f"Unable to open file: {err}")
-                        sys.exit(1)
+                    images.append(Image.open(os.path.join(args.d, filename)).convert("RGBA"))
 
             if len(images) < 1:
                 print(f"No images were found in {args.d}.")
                 sys.exit(0)
 
-    # override output directory
+    except (FileNotFoundError, OSError) as e:
+        print(e)
+        sys.exit(1)
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+        sys.exit(1)
+
     if args.outputDir:
         if not os.path.isdir(args.outputDir):
-            print(f"{args.outputDir} is not a directory.")
+            print(f"{args.outputDir} is not a valid output directory")
             sys.exit(2)
         else:
             output_directory = args.outputDir
 
-    # override font size
     if args.size:
         if args.size < 1:
             print("Font size cannot be negative")
@@ -102,21 +112,22 @@ if __name__ == "__main__":
         else:
             font_size = args.size
 
-    # resize image(s)
     if args.resize:
         if args.resize < 1:
-            print("Resized width cannot be negative.")
+            print("Resized width cannot be negative")
             sys.exit(2)
         else:
             print("Resizing images...")
             images = [resize_image(image, args.resize) for image in images]
             print(f"{len(images)} images resized!")
 
-    # convert image to ASCII
+    # convert image(s) to ASCII
     print("Converting images...")
     ascii_images = [image_to_ascii(image, density, font_size, args.color) for image in images]
     print(f"{len(ascii_images)} images converted!")
 
     # save image to output directory
+    print("Saving output...")
     for i in range(len(ascii_images)):
-        ascii_images[i].save(os.path.join(output_directory, f"image{i}.png"))
+        ascii_images[i].save(os.path.join(output_directory, f"output{i}.png"))
+    print(f"Output saved! You can find your output at: {output_directory}")
