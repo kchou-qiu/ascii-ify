@@ -65,6 +65,7 @@ if __name__ == "__main__":
     density = "@%#*+=-:. "
     font_size = 12
     images = []
+    ascii_images = []
     video = None
 
     # set up accepted commandline arguments
@@ -73,8 +74,11 @@ if __name__ == "__main__":
     path_type.add_argument("-f", "-filepath", type=str, help="path to file")
     path_type.add_argument("-d", "-directory", type=str, help="path to directory of images(.png, .jpg, .jpeg)")
     parser.add_argument("-o", "--outputDir", help="path to output directory")
-    parser.add_argument("-s", "--size", type=int, help="font size of ASCII char for output image. Default: 12")
-    parser.add_argument("-r", "--resize", type=int, help="resize width of image while retaining aspect ratio")
+    parser.add_argument("--fontSize", type=int, help="font size of ASCII char for output image. Default: 12")
+    parser.add_argument("-r", "--resize", type=int, help="resize width of original image while retaining aspect ratio")
+    parser.add_argument("--resizeFinal", type=int, help="resizes width of final image output while retaining"
+                                                        " aspect ratio")
+    parser.add_argument("-g", "--gif", type=int, help="toggle to output a gif with specified duration of each frame")
     parser.add_argument("-c", "--color", action="store_true", help="toggle color for output image")
     args = parser.parse_args()
 
@@ -105,7 +109,7 @@ if __name__ == "__main__":
         else:
             output_directory = args.outputDir
 
-    if args.size:
+    if args.fontSize:
         if args.size < 1:
             print("Font size cannot be negative")
             sys.exit(2)
@@ -116,18 +120,28 @@ if __name__ == "__main__":
         if args.resize < 1:
             print("Resized width cannot be negative")
             sys.exit(2)
-        else:
-            print("Resizing images...")
-            images = [resize_image(image, args.resize) for image in images]
-            print(f"{len(images)} images resized!")
+
+    if args.gif:
+        if args.gif < 1:
+            print("Duration of an individual frame cannot be negative")
+            sys.exit(2)
 
     # convert image(s) to ASCII
     print("Converting images...")
-    ascii_images = [image_to_ascii(image, density, font_size, args.color) for image in images]
-    print(f"{len(ascii_images)} images converted!")
+    for i in range(len(images)):
+        images[i] = resize_image(images[i], args.resize)
+        ascii_image = image_to_ascii(images[i], density, font_size, args.color)
 
-    # save image to output directory
-    print("Saving output...")
-    for i in range(len(ascii_images)):
-        ascii_images[i].save(os.path.join(output_directory, f"output{i}.png"))
-    print(f"Output saved! You can find your output at: {output_directory}")
+        if args.resizeFinal:
+            ascii_image = resize_image(ascii_image, args.resizeFinal)
+
+        if args.gif:
+            ascii_images.append(ascii_image)
+        else:
+            ascii_image.save(os.path.join(output_directory, f"output{i}.png"))
+
+        print(f"Processed image #{i}...")
+
+    if args.gif:
+        ascii_images[0].save("test.gif", save_all=True, append_images= ascii_images[1:], duration=args.gif, loop=0)
+    print("Process completed.")
