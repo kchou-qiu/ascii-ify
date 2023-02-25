@@ -9,7 +9,6 @@ def resize_image(image, resized_width):
     Resizes given image while the preserving aspect ratio of the original image.
     Resizing large images reduces image complexity and improves performance during ASCII
     conversion process.
-
     :param image: The image to be resized.
     :param resized_width: The desired width of the resized image.
     :return: A PIL.Image.Image object.
@@ -22,7 +21,6 @@ def resize_image(image, resized_width):
 def image_to_ascii(image, density, font_size, colored=False):
     """
     Converts an image to it's ASCII equivalent.
-
     :param image: The image to be converted.
     :param density: A string of ASCII characters that maps to the brightness of each pixel. For example using the string
         "@%#*+=-:. " means pure black pixels are assigned the character "@" while pure white pixels are given the value
@@ -35,25 +33,24 @@ def image_to_ascii(image, density, font_size, colored=False):
     # set up blank image to draw ASCII characters on
     font = ImageFont.truetype(os.path.join(os.environ["WINDIR"], "Fonts", "consola.ttf"), size=font_size)
     b_left, b_top, b_right, b_bottom = font.getbbox("@")
-    ascii_image = Image.new("RGB", (image.size[0] * b_right, image.size[1] * b_bottom), color=(255, 255, 255))
+    ascii_image = Image.new("RGBA", (image.size[0] * b_right, image.size[1] * b_bottom), color=(255, 255, 255, 0))
     draw = ImageDraw.Draw(ascii_image)
 
     # use grayscale pixel brightness to determine how "dense" ASCII char should be
     pixels = image.load()
-    fill_color = (0, 0, 0)
 
     for x in range(image.size[0]):
         for y in range(image.size[1]):
             r, g, b, a = pixels[x, y]
 
             # transparent pixels have same RGB values as black (i.e. 0, 0, 0) with alpha = 0 instead of 255
-            # need to check alpha channel, to differentiate between the two
             luminosity = 255 if a == 0 else int(r * 0.3 + g * 0.59 + b * 0.11)
-            pixels[x, y] = (luminosity, luminosity, luminosity)
             ascii_char = density[int(luminosity * (len(density) - 1) / 255)]
 
             if colored:
-                fill_color = (r, g, b)
+                fill_color = (r, g, b, a)
+            else:
+                fill_color = (0, 0, 0, a)
 
             draw.text((x * b_right, y * b_bottom), ascii_char, font=font, fill=fill_color)
 
@@ -76,8 +73,6 @@ if __name__ == "__main__":
     parser.add_argument("-o", "--outputDir", help="path to output directory")
     parser.add_argument("--fontSize", type=int, help="font size of ASCII char for output image. Default: 12")
     parser.add_argument("-r", "--resize", type=int, help="resize width of original image while retaining aspect ratio")
-    parser.add_argument("--resizeFinal", type=int, help="resizes width of final image output while retaining"
-                                                        " aspect ratio")
     parser.add_argument("-g", "--gif", type=int, help="toggle to output a gif with specified duration of each frame")
     parser.add_argument("-c", "--color", action="store_true", help="toggle color for output image")
     args = parser.parse_args()
@@ -110,11 +105,11 @@ if __name__ == "__main__":
             output_directory = args.outputDir
 
     if args.fontSize:
-        if args.size < 1:
+        if args.fontSize < 1:
             print("Font size cannot be negative")
             sys.exit(2)
         else:
-            font_size = args.size
+            font_size = args.fontSize
 
     if args.resize:
         if args.resize < 1:
@@ -129,19 +124,20 @@ if __name__ == "__main__":
     # convert image(s) to ASCII
     print("Converting images...")
     for i in range(len(images)):
-        images[i] = resize_image(images[i], args.resize)
-        ascii_image = image_to_ascii(images[i], density, font_size, args.color)
+        if args.resize:
+            image = resize_image(images[i], args.resize)
 
-        if args.resizeFinal:
-            ascii_image = resize_image(ascii_image, args.resizeFinal)
+        image = image_to_ascii(image, density, font_size, args.color)
 
         if args.gif:
-            ascii_images.append(ascii_image)
+            ascii_images.append(image)
         else:
-            ascii_image.save(os.path.join(output_directory, f"output{i}.png"))
+            image.save(os.path.join(output_directory, f"output{i}.png"))
 
         print(f"Processed image #{i}...")
 
     if args.gif:
-        ascii_images[0].save("test.gif", save_all=True, append_images= ascii_images[1:], duration=args.gif, loop=0)
+        print("Creating .gif...")
+        ascii_images[0].save(os.path.join(output_directory, f"output.gif"), format="GIF", save_all=True,
+                             append_images=ascii_images[1:], duration=args.gif, disposal=2, transparency=0, loop=0)
     print("Process completed.")
